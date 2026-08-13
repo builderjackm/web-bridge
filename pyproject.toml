@@ -1,0 +1,17 @@
+[project]
+name = "webbridge"
+version = "1.11.5"
+description = "Command-line client for Web Bridge"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+webbridge = "web_bridge.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "web_bridge"
