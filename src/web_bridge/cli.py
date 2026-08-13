@@ -75,10 +75,9 @@ def add_action_parser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
     name: str,
     *,
-    aliases: Sequence[str] = (),
     help_text: str,
 ) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser(name, aliases=list(aliases), help=help_text)
+    parser = subparsers.add_parser(name, help=help_text)
     parser.set_defaults(action=name)
     return parser
 
@@ -127,7 +126,6 @@ def build_parser() -> argparse.ArgumentParser:
     find_tab = add_action_parser(
         commands,
         "find_tab",
-        aliases=("find-tab",),
         help_text="按 URL 选择标签页",
     )
     find_tab.add_argument("url")
@@ -144,10 +142,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     mouse_click = add_action_parser(
         commands,
-        "mouse-click",
+        "mouse_click",
         help_text="通过 CDP 发送真实鼠标点击",
     )
-    mouse_click.set_defaults(action="mouse_click")
     mouse_click.add_argument("selector")
 
     evaluate = add_action_parser(commands, "evaluate", help_text="在当前页执行 JavaScript")
@@ -155,18 +152,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     key_type = add_action_parser(
         commands,
-        "key-type",
+        "key_type",
         help_text="通过 CDP 向当前焦点输入文本",
     )
-    key_type.set_defaults(action="key_type")
     key_type.add_argument("text")
 
     send_keys = add_action_parser(
         commands,
-        "send-keys",
+        "send_keys",
         help_text="发送按键或组合键",
     )
-    send_keys.set_defaults(action="send_keys")
     send_keys.add_argument("keys")
     send_keys.add_argument("--repeat", type=repeat_count)
 
@@ -192,7 +187,6 @@ def build_parser() -> argparse.ArgumentParser:
     pdf = add_action_parser(
         commands,
         "save_as_pdf",
-        aliases=("save-as-pdf",),
         help_text="把当前页保存为 PDF",
     )
     pdf.add_argument(
@@ -211,19 +205,16 @@ def build_parser() -> argparse.ArgumentParser:
     add_action_parser(
         commands,
         "list_tabs",
-        aliases=("list-tabs",),
         help_text="列出当前 session 的标签页",
     )
     add_action_parser(
         commands,
         "close_tab",
-        aliases=("close-tab",),
         help_text="关闭当前 session 的当前标签页",
     )
     add_action_parser(
         commands,
         "close_session",
-        aliases=("close-session",),
         help_text="关闭当前 session 的全部标签页",
     )
     return parser

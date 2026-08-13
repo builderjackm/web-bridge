@@ -51,9 +51,9 @@ class PayloadTests(unittest.TestCase):
             },
         )
 
-    def test_find_tab_alias(self) -> None:
+    def test_find_tab(self) -> None:
         self.assertEqual(
-            self.payload("task", "find-tab", "https://example.com", "--active"),
+            self.payload("task", "find_tab", "https://example.com", "--active"),
             {
                 "action": "find_tab",
                 "args": {"url": "https://example.com", "active": True},
@@ -62,10 +62,15 @@ class PayloadTests(unittest.TestCase):
         )
 
     def test_simple_actions(self) -> None:
-        for action in ("snapshot", "list_tabs", "close_tab", "close_session"):
-            with self.subTest(action=action):
+        for command, action in (
+            ("snapshot", "snapshot"),
+            ("list_tabs", "list_tabs"),
+            ("close_tab", "close_tab"),
+            ("close_session", "close_session"),
+        ):
+            with self.subTest(command=command):
                 self.assertEqual(
-                    self.payload("task", action),
+                    self.payload("task", command),
                     {"action": action, "args": {}, "session": "task"},
                 )
 
@@ -85,7 +90,7 @@ class PayloadTests(unittest.TestCase):
 
     def test_cdp_input_tools(self) -> None:
         self.assertEqual(
-            self.payload("task", "mouse-click", "@e42"),
+            self.payload("task", "mouse_click", "@e42"),
             {
                 "action": "mouse_click",
                 "args": {"selector": "@e42"},
@@ -93,24 +98,29 @@ class PayloadTests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            self.payload("task", "key-type", "中文")["args"],
+            self.payload("task", "key_type", "中文")["args"],
             {"text": "中文"},
         )
         self.assertEqual(
-            self.payload("task", "send-keys", "Mod+A", "--repeat", "2")["args"],
+            self.payload("task", "send_keys", "Mod+A", "--repeat", "2")["args"],
             {"keys": "Mod+A", "repeat": 2},
         )
 
-    def test_extended_input_tools_only_accept_hyphenated_cli_names(self) -> None:
-        for command, argument in (
-            ("mouse_click", "@e42"),
-            ("key_type", "text"),
-            ("send_keys", "Enter"),
+    def test_multiword_tools_only_accept_underscored_cli_names(self) -> None:
+        for argv in (
+            ("find-tab", "https://example.com"),
+            ("mouse-click", "@e42"),
+            ("key-type", "text"),
+            ("send-keys", "Enter"),
+            ("save-as-pdf",),
+            ("list-tabs",),
+            ("close-tab",),
+            ("close-session",),
         ):
-            with self.subTest(command=command):
+            with self.subTest(command=argv[0]):
                 errors = io.StringIO()
                 with redirect_stderr(errors), self.assertRaises(SystemExit):
-                    self.parser.parse_args(["task", command, argument])
+                    self.parser.parse_args(["task", *argv])
 
     def test_cdp(self) -> None:
         self.assertEqual(
@@ -163,11 +173,11 @@ class PayloadTests(unittest.TestCase):
             {"selector": "@e9", "files": ["/tmp/a", "/tmp/b"]},
         )
 
-    def test_save_as_pdf_alias(self) -> None:
+    def test_save_as_pdf(self) -> None:
         self.assertEqual(
             self.payload(
                 "task",
-                "save-as-pdf",
+                "save_as_pdf",
                 "--paper-format",
                 "a4",
                 "--landscape",
@@ -279,11 +289,11 @@ class HelpParityTests(unittest.TestCase):
             "snapshot",
             "click",
             "fill",
-            "mouse-click",
+            "mouse_click",
             "evaluate",
             "cdp",
-            "key-type",
-            "send-keys",
+            "key_type",
+            "send_keys",
             "screenshot",
             "network",
             "upload",
@@ -303,9 +313,14 @@ class HelpParityTests(unittest.TestCase):
         self.assertNotIn(old_brand, document)
         self.assertIn("webbridge SESSION ACTION", document)
         self.assertIn("webbridge my-task screenshot", document)
-        self.assertNotIn("mouse_click", document)
-        self.assertNotIn("key_type", document)
-        self.assertNotIn("send_keys", document)
+        self.assertNotIn("mouse-click", document)
+        self.assertNotIn("key-type", document)
+        self.assertNotIn("send-keys", document)
+        self.assertNotIn("find-tab", document)
+        self.assertNotIn("save-as-pdf", document)
+        self.assertNotIn("list-tabs", document)
+        self.assertNotIn("close-tab", document)
+        self.assertNotIn("close-session", document)
 
     def test_help_has_no_extra_operations_appendix(self) -> None:
         document = load_help_document()
