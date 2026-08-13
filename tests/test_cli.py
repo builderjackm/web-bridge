@@ -5,7 +5,7 @@ import json
 import sys
 import unittest
 import urllib.error
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -100,6 +100,17 @@ class PayloadTests(unittest.TestCase):
             self.payload("task", "send-keys", "Mod+A", "--repeat", "2")["args"],
             {"keys": "Mod+A", "repeat": 2},
         )
+
+    def test_extended_input_tools_only_accept_hyphenated_cli_names(self) -> None:
+        for command, argument in (
+            ("mouse_click", "@e42"),
+            ("key_type", "text"),
+            ("send_keys", "Enter"),
+        ):
+            with self.subTest(command=command):
+                errors = io.StringIO()
+                with redirect_stderr(errors), self.assertRaises(SystemExit):
+                    self.parser.parse_args(["task", command, argument])
 
     def test_cdp(self) -> None:
         self.assertEqual(
@@ -268,11 +279,11 @@ class HelpParityTests(unittest.TestCase):
             "snapshot",
             "click",
             "fill",
-            "mouse_click",
+            "mouse-click",
             "evaluate",
             "cdp",
-            "key_type",
-            "send_keys",
+            "key-type",
+            "send-keys",
             "screenshot",
             "network",
             "upload",
@@ -292,6 +303,9 @@ class HelpParityTests(unittest.TestCase):
         self.assertNotIn(old_brand, document)
         self.assertIn("webbridge SESSION ACTION", document)
         self.assertIn("webbridge my-task screenshot", document)
+        self.assertNotIn("mouse_click", document)
+        self.assertNotIn("key_type", document)
+        self.assertNotIn("send_keys", document)
 
     def test_help_has_no_extra_operations_appendix(self) -> None:
         document = load_help_document()

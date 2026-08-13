@@ -30,11 +30,11 @@ find_tab       URL [--active]                                {success, url, tabI
 snapshot       —                                             {url, title, tree} with @e refs. Accessibility tree (text): use this to read page content and locate elements.
 click          SELECTOR                                      {success, tag, text}. Synthetic el.click().
 fill           SELECTOR VALUE                                {success, tag, mode}. Works on <input>/<textarea> and [contenteditable] (ProseMirror/Lexical/Slate). mode is "value" or "contenteditable".
-mouse_click    SELECTOR                                      {success, x, y, tag, text}. Uses CDP trusted mouse events at the element's center.
+mouse-click    SELECTOR                                      {success, x, y, tag, text}. Uses CDP trusted mouse events at the element's center.
 evaluate       CODE                                          {type, value}. Supports async/await.
 cdp            METHOD [PARAMS_JSON]                          Raw CDP response. Raw chrome.debugger passthrough — what evaluate is to JS, cdp is to CDP. Low-level escape hatch for cases the tools above don't cover.
-key_type       TEXT                                          {success, length}. Inserts text at the current focus through CDP.
-send_keys      KEYS [--repeat 1-100]                         {success, dispatched, os}. Sends keys and modifier combinations through CDP.
+key-type       TEXT                                          {success, length}. Inserts text at the current focus through CDP.
+send-keys      KEYS [--repeat 1-100]                         {success, dispatched, os}. Sends keys and modifier combinations through CDP.
 screenshot     [--format png|jpeg] [--quality 0-100]         {format, path, sizeBytes, mimeType}. Optional --selector (@e/CSS) and --path. Returns a file path, not base64.
 network        start|stop|list|detail [--filter FILTER]      Request/response data. Optional --request-id ID.
 upload         SELECTOR FILE [FILE ...]                      {success, fileCount}.
@@ -43,8 +43,8 @@ list_tabs      —                                             {success, tabs:[{
 close_tab      —                                             {success, closed: bool}. Close the current tab in the session.
 close_session  —                                             {success, closed: int}. Close all tabs in the session; closed is the count.
 
-Hyphen aliases are also accepted for find-tab, mouse-click, key-type,
-send-keys, save-as-pdf, list-tabs, close-tab, and close-session.
+Hyphen aliases are also accepted for find-tab, save-as-pdf, list-tabs,
+close-tab, and close-session.
 
 Tabs and the current tab
 ------------------------
@@ -191,7 +191,7 @@ Form submit / special keys
 
 The original guide submits forms by clicking the submit button directly (click
 on the @e ref or selector). This CLI also exposes the execution layer's
-send_keys tool, so trusted Enter/Escape input can be sent directly:
+send-keys tool, so trusted Enter/Escape input can be sent directly:
 
     webbridge my-task send-keys Enter
     webbridge my-task send-keys Escape
@@ -206,22 +206,22 @@ Trusted mouse and keyboard input
 The extension also exposes three CDP input tools that were implemented by the
 browser execution layer but were not listed in the original public guide:
 
-* mouse_click scrolls an element into view, finds the center of its layout box,
+* mouse-click scrolls an element into view, finds the center of its layout box,
   and dispatches mouseMoved, mousePressed, and mouseReleased events. Use it when
   a site rejects the synthetic DOM click action.
-* key_type inserts literal text at the current browser focus using
+* key-type inserts literal text at the current browser focus using
   Input.insertText.
-* send_keys dispatches named keys and modifier combinations. Supported names
+* send-keys dispatches named keys and modifier combinations. Supported names
   include Enter, Escape, Tab, Backspace, Delete, Space, arrow keys, Home, End,
   PageUp, PageDown, F1-F12, letters, and digits. Mod maps to Command on macOS
   and Control on Windows/Linux.
 
 Examples:
 
-    webbridge my-task mouse_click @e42
-    webbridge my-task key_type "literal text"
-    webbridge my-task send_keys "Mod+A"
-    webbridge my-task send_keys "Enter Escape" --repeat 2
+    webbridge my-task mouse-click @e42
+    webbridge my-task key-type "literal text"
+    webbridge my-task send-keys "Mod+A"
+    webbridge my-task send-keys "Enter Escape" --repeat 2
 
 Save the current page as PDF
 ----------------------------
@@ -249,7 +249,7 @@ Known limitations
 
 * Sites that strictly check event.isTrusted (some banking portals, captchas)
   ignore click / fill because those fire DOM-level synthetic events
-  (isTrusted=false). Try mouse_click or send_keys when the same interaction can
+  (isTrusted=false). Try mouse-click or send-keys when the same interaction can
   be expressed as trusted CDP input. Captchas still require manual interaction.
 * Cross-origin iframes: fill, click, evaluate, and snapshot operate on the top
   frame. If a target element lives in a same-page iframe from a different origin

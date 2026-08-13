@@ -45,10 +45,10 @@ webbridge [--endpoint URL] [--timeout SECONDS] SESSION COMMAND [ARGS...]
 | `snapshot` | 无 |
 | `click` | `SELECTOR` |
 | `fill` | `SELECTOR VALUE` |
-| `mouse_click` / `mouse-click` | `SELECTOR` |
+| `mouse-click` | `SELECTOR` |
 | `evaluate` | `CODE` |
-| `key_type` / `key-type` | `TEXT` |
-| `send_keys` / `send-keys` | `KEYS [--repeat 1-100]` |
+| `key-type` | `TEXT` |
+| `send-keys` | `KEYS [--repeat 1-100]` |
 | `cdp` | `METHOD [PARAMS_JSON]` |
 | `screenshot` | `[--format png\|jpeg] [--quality 0-100] [--selector SELECTOR] [--path PATH]` |
 | `network` | `start\|stop\|list\|detail [--filter FILTER] [--request-id ID]` |
@@ -88,7 +88,7 @@ webbridge --endpoint http://127.0.0.1:10086/command research snapshot
 WEBBRIDGE_URL=http://127.0.0.1:10086/command webbridge research snapshot
 ```
 
-`webbridge --help` 内置完整使用手册。手册保持 Web Bridge 文案，将原始 HTTP 示例逐项改写为 CLI，并补充执行层支持的 `mouse_click`、`key_type` 和 `send_keys`。
+`webbridge --help` 内置完整使用手册。手册保持 Web Bridge 文案，将原始 HTTP 示例逐项改写为 CLI，并补充执行层支持的 `mouse-click`、`key-type` 和 `send-keys`。
 
 ## 直接用 uv 脚本运行
 

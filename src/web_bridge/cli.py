@@ -144,10 +144,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     mouse_click = add_action_parser(
         commands,
-        "mouse_click",
-        aliases=("mouse-click",),
+        "mouse-click",
         help_text="通过 CDP 发送真实鼠标点击",
     )
+    mouse_click.set_defaults(action="mouse_click")
     mouse_click.add_argument("selector")
 
     evaluate = add_action_parser(commands, "evaluate", help_text="在当前页执行 JavaScript")
@@ -155,18 +155,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     key_type = add_action_parser(
         commands,
-        "key_type",
-        aliases=("key-type",),
+        "key-type",
         help_text="通过 CDP 向当前焦点输入文本",
     )
+    key_type.set_defaults(action="key_type")
     key_type.add_argument("text")
 
     send_keys = add_action_parser(
         commands,
-        "send_keys",
-        aliases=("send-keys",),
+        "send-keys",
         help_text="发送按键或组合键",
     )
+    send_keys.set_defaults(action="send_keys")
     send_keys.add_argument("keys")
     send_keys.add_argument("--repeat", type=repeat_count)
 
