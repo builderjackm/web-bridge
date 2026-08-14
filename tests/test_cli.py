@@ -20,6 +20,7 @@ from web_bridge.cli import (  # noqa: E402
     load_help_document,
     main,
     send_command,
+    start_daemon,
 )
 
 
@@ -231,17 +232,116 @@ class TransportTests(unittest.TestCase):
         self.assertNotIn(b"\n", request.data)
         self.assertEqual(urlopen.call_args.kwargs["timeout"], 12)
 
-    def test_connection_error_is_wrapped(self) -> None:
+    def test_connection_error_starts_daemon_and_retries(self) -> None:
+        class Response:
+            def __enter__(self) -> "Response":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return b'{"ok":true}'
+
         with patch(
             "urllib.request.urlopen",
-            side_effect=urllib.error.URLError("connection refused"),
-        ):
-            with self.assertRaisesRegex(CliError, "daemon 与浏览器扩展已经启动"):
-                send_command(
+            side_effect=[
+                urllib.error.URLError("connection refused"),
+                Response(),
+            ],
+        ) as urlopen:
+            with patch("web_bridge.cli.start_daemon") as daemon_start:
+                result = send_command(
                     "http://127.0.0.1:10086/command",
                     {"action": "snapshot", "args": {}, "session": "task"},
                     1,
                 )
+
+        self.assertEqual(result, {"ok": True})
+        daemon_start.assert_called_once_with()
+        self.assertEqual(urlopen.call_count, 2)
+
+    def test_retry_connection_error_is_wrapped(self) -> None:
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=urllib.error.URLError("connection refused"),
+        ) as urlopen:
+            with patch("web_bridge.cli.start_daemon") as daemon_start:
+                with self.assertRaisesRegex(
+                    CliError, "自动启动 daemon 后仍无法连接"
+                ):
+                    send_command(
+                        "http://127.0.0.1:10086/command",
+                        {"action": "snapshot", "args": {}, "session": "task"},
+                        1,
+                    )
+
+        daemon_start.assert_called_once_with()
+        self.assertEqual(urlopen.call_count, 2)
+
+    def test_daemon_start_error_is_wrapped(self) -> None:
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=urllib.error.URLError("connection refused"),
+        ):
+            with patch(
+                "web_bridge.cli.start_daemon",
+                side_effect=CliError("自动启动 daemon 失败：missing"),
+            ):
+                with self.assertRaisesRegex(CliError, "自动启动 daemon 失败"):
+                    send_command(
+                        "http://127.0.0.1:10086/command",
+                        {"action": "snapshot", "args": {}, "session": "task"},
+                        1,
+                    )
+
+    def test_custom_endpoint_does_not_start_local_daemon(self) -> None:
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=urllib.error.URLError("connection refused"),
+        ):
+            with patch("web_bridge.cli.start_daemon") as daemon_start:
+                with self.assertRaisesRegex(CliError, "无法连接 Web Bridge"):
+                    send_command(
+                        "http://127.0.0.1:19999/command",
+                        {"action": "snapshot", "args": {}, "session": "task"},
+                        1,
+                    )
+
+        daemon_start.assert_not_called()
+
+    def test_http_error_does_not_start_daemon(self) -> None:
+        error = urllib.error.HTTPError(
+            "http://127.0.0.1:10086/command",
+            503,
+            "unavailable",
+            None,
+            io.BytesIO(b'{"error":"extension unavailable"}'),
+        )
+        with patch("urllib.request.urlopen", side_effect=error):
+            with patch("web_bridge.cli.start_daemon") as daemon_start:
+                with self.assertRaisesRegex(CliError, "HTTP 503"):
+                    send_command(
+                        "http://127.0.0.1:10086/command",
+                        {"action": "snapshot", "args": {}, "session": "task"},
+                        1,
+                    )
+
+        daemon_start.assert_not_called()
+
+    def test_start_daemon_uses_installed_executable(self) -> None:
+        executable = Path("/tmp/webbridge-test/kimi-webbridge")
+        with patch("web_bridge.cli.daemon_executable", return_value=executable):
+            with patch("web_bridge.cli.subprocess.run") as run:
+                start_daemon()
+
+        run.assert_called_once_with(
+            [str(executable), "start"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30.0,
+        )
 
     def test_main_prints_compact_json(self) -> None:
         output = io.StringIO()

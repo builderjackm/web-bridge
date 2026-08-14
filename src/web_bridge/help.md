@@ -255,10 +255,11 @@ Known limitations
 If a tool call fails (daemon or extension not ready)
 ----------------------------------------------------
 
-This CLI is only a client. If a call can't reach the daemon (connection
-refused), confirm that the separately installed Web Bridge daemon and browser
-extension are running, then retry the same command. This project does not
-provide daemon lifecycle commands.
+This CLI is only a client. If the default endpoint can't reach the daemon, the
+CLI automatically runs the separately installed daemon's start command and
+retries the original request once. HTTP errors, extension errors, action
+failures, and custom endpoints do not trigger automatic startup. This project
+does not provide stop or restart commands.
 
 * Local help: http://127.0.0.1:10086/
 

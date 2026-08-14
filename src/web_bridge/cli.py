@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import urllib.error
 import urllib.request
 from importlib.resources import files
+from pathlib import Path
 from typing import Any, NoReturn, Optional, Sequence
 
 from . import __version__
@@ -16,6 +18,7 @@ from . import __version__
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:10086/command"
 DEFAULT_TIMEOUT = 60.0
+DAEMON_START_TIMEOUT = 30.0
 
 
 class CliError(Exception):
@@ -305,6 +308,45 @@ def response_error(body: bytes) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))[:1000]
 
 
+def daemon_executable() -> Path:
+    name = "kimi-webbridge.exe" if os.name == "nt" else "kimi-webbridge"
+    return Path.home() / ".kimi-webbridge" / "bin" / name
+
+
+def start_daemon() -> None:
+    command = [str(daemon_executable()), "start"]
+    try:
+        subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=DAEMON_START_TIMEOUT,
+        )
+    except FileNotFoundError as exc:
+        raise CliError(f"自动启动 daemon 失败：未找到 {command[0]}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise CliError(
+            f"自动启动 daemon 在 {DAEMON_START_TIMEOUT:g} 秒后超时"
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or f"exit {exc.returncode}").strip()
+        raise CliError(f"自动启动 daemon 失败：{detail}") from exc
+    except OSError as exc:
+        raise CliError(f"自动启动 daemon 失败：{exc}") from exc
+
+
+def request_once(request: urllib.request.Request, timeout: float) -> bytes:
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.read()
+    except urllib.error.HTTPError as exc:
+        detail = response_error(exc.read())
+        raise CliError(f"WebBridge 请求失败（HTTP {exc.code}）：{detail}") from exc
+    except TimeoutError as exc:
+        raise CliError(f"WebBridge 请求在 {timeout:g} 秒后超时") from exc
+
+
 def send_command(endpoint: str, payload: dict[str, Any], timeout: float) -> Any:
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
@@ -314,19 +356,25 @@ def send_command(endpoint: str, payload: dict[str, Any], timeout: float) -> Any:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            response_body = response.read()
-    except urllib.error.HTTPError as exc:
-        detail = response_error(exc.read())
-        raise CliError(f"WebBridge 请求失败（HTTP {exc.code}）：{detail}") from exc
-    except urllib.error.URLError as exc:
-        reason = getattr(exc, "reason", exc)
-        raise CliError(
-            "无法连接 Web Bridge："
-            f"{reason}。请确认 Web Bridge daemon 与浏览器扩展已经启动"
-        ) from exc
-    except TimeoutError as exc:
-        raise CliError(f"WebBridge 请求在 {timeout:g} 秒后超时") from exc
+        response_body = request_once(request, timeout)
+    except urllib.error.URLError as first_error:
+        if endpoint.rstrip("/") != DEFAULT_ENDPOINT:
+            reason = getattr(first_error, "reason", first_error)
+            raise CliError(f"无法连接 Web Bridge：{reason}") from first_error
+        try:
+            start_daemon()
+        except CliError as start_error:
+            reason = getattr(first_error, "reason", first_error)
+            raise CliError(
+                f"无法连接 Web Bridge：{reason}；{start_error}"
+            ) from first_error
+        try:
+            response_body = request_once(request, timeout)
+        except urllib.error.URLError as retry_error:
+            reason = getattr(retry_error, "reason", retry_error)
+            raise CliError(
+                f"自动启动 daemon 后仍无法连接 Web Bridge：{reason}"
+            ) from retry_error
 
     try:
         return json.loads(response_body)

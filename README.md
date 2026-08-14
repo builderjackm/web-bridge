@@ -6,7 +6,7 @@
 webbridge CLI ──HTTP──> 127.0.0.1:10086/command ──> 现有浏览器扩展 ──> 页面
 ```
 
-本项目只包含客户端，不再提供 daemon、浏览器扩展或 daemon 管理命令。使用前需先安装并启动 Kimi Web Bridge；官方说明见 [Web Bridge 中文页面](https://www.kimi.com/zh-cn/features/webbridge)。
+本项目只包含客户端，不再提供 daemon、浏览器扩展或 daemon 管理命令。使用前需先安装 Kimi Web Bridge；官方说明见 [Web Bridge 中文页面](https://www.kimi.com/zh-cn/features/webbridge)。
 
 ## 安装
 
@@ -88,6 +88,15 @@ webbridge --endpoint http://127.0.0.1:10086/command research snapshot
 WEBBRIDGE_URL=http://127.0.0.1:10086/command webbridge research snapshot
 ```
 
+使用默认 endpoint 时，如果 daemon 连接不上，CLI 会自动执行一次已安装 daemon 的 `start` 命令，然后重试原请求：
+
+```text
+macOS / Linux: ~/.kimi-webbridge/bin/kimi-webbridge start
+Windows:        %USERPROFILE%\.kimi-webbridge\bin\kimi-webbridge.exe start
+```
+
+只有连接错误会触发自动启动。HTTP 错误、浏览器扩展未连接或 action 执行失败不会启动 daemon；自定义 endpoint 也不会触发本机 daemon。
+
 `webbridge --help` 内置完整使用手册。手册保持 Web Bridge 文案，将原始 HTTP 示例逐项改写为 CLI，并补充执行层支持的 `mouse_click`、`key_type` 和 `send_keys`。
 
 ## 直接用 uv 脚本运行
@@ -106,4 +115,4 @@ uv run --with pytest pytest -q
 uv build
 ```
 
-测试覆盖 17 个 action 的参数转换、别名、UTF-8 JSON、HTTP 错误和帮助文档完整性。
+测试覆盖 17 个 action 的参数转换、UTF-8 JSON、连接失败自动启动与重试、HTTP 错误和帮助文档完整性。
