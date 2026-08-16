@@ -1,4 +1,4 @@
-const DAEMON_URL = "ws://127.0.0.1:9333/extension";
+const DAEMON_URL = "ws://127.0.0.1:9222/extension";
 const RECONNECT_MAX_MS = 10000;
 
 let socket = null;

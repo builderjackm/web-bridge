@@ -246,9 +246,9 @@ class ExtensionManifestTests(unittest.TestCase):
         transport = (PROJECT_ROOT / "extension" / "offscreen.js").read_text(
             encoding="utf-8"
         )
-        self.assertIn("ws://127.0.0.1:9333/extension", transport)
+        self.assertIn("ws://127.0.0.1:9222/extension", transport)
         popup = (PROJECT_ROOT / "extension" / "popup.js").read_text(encoding="utf-8")
-        self.assertIn("http://127.0.0.1:9333/", popup)
+        self.assertIn("http://127.0.0.1:9222/", popup)
 
     def test_old_product_and_command_protocol_are_removed(self) -> None:
         old_brand = "".join(("ki", "mi"))

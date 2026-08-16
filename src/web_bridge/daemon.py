@@ -16,7 +16,7 @@ from aiohttp import WSMsgType, web
 from . import __version__
 
 HOST = "127.0.0.1"
-PORT = 9333
+PORT = 9222
 PROTOCOL_VERSION = "1.3"
 RPC_TIMEOUT = 120.0
 LOGGER = logging.getLogger("webbridge")

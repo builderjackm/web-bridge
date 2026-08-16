@@ -16,12 +16,13 @@ from urllib.request import urlopen
 
 from . import __version__
 
-STATUS_URL = "http://127.0.0.1:9333/"
+STATUS_URL = "http://127.0.0.1:9222/"
 STATE_DIR = Path.home() / ".webbridge"
 PID_FILE = STATE_DIR / "daemon.pid"
 LOG_FILE = STATE_DIR / "daemon.log"
 START_TIMEOUT = 5.0
 STOP_TIMEOUT = 5.0
+WINDOWS_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 
 
 def _status_payload(timeout: float = 1.0) -> Optional[Dict[str, Any]]:
@@ -75,9 +76,7 @@ def _spawn_daemon() -> subprocess.Popen[bytes]:
             "close_fds": True,
         }
         if os.name == "nt":
-            kwargs["creationflags"] = (
-                subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-            )
+            kwargs["creationflags"] = WINDOWS_CREATE_NO_WINDOW
         else:
             kwargs["start_new_session"] = True
         return subprocess.Popen(

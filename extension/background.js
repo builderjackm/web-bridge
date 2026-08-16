@@ -101,7 +101,7 @@ function setBadge(connected) {
   chrome.action.setBadgeText({ text: connected ? "ON" : "" });
   chrome.action.setBadgeBackgroundColor({ color: connected ? "#16803c" : "#6b7280" });
   chrome.action.setTitle({
-    title: connected ? "WebBridge CDP: connected on 127.0.0.1:9333" : "WebBridge CDP: daemon disconnected",
+    title: connected ? "WebBridge CDP: connected on 127.0.0.1:9222" : "WebBridge CDP: daemon disconnected",
   });
 }
 

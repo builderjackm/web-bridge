@@ -1,73 +1,73 @@
 # WebBridge CDP
 
-WebBridge CDP 把用户当前的 Chrome 暴露为一个本机标准 CDP endpoint。项目只包含两个组件：
+WebBridge exposes the user's current Chrome browser as a standard local CDP endpoint. The runtime has two components:
 
 ```text
-CDP client ──HTTP/WebSocket──> 127.0.0.1:9333 daemon
+CDP client ──HTTP/WebSocket──> 127.0.0.1:9222 daemon
                                       ▲
-                                      │ WebSocket（扩展主动连接）
+                                      │ WebSocket (extension-initiated)
                                       │
                                 Chrome Extension
                                       │
                                 chrome.debugger API
 ```
 
-不需要给 Chrome 增加远程调试启动参数，也不需要启用 Chrome 的远程调试端口。CDP client 只连接 daemon；daemon 负责标准 CDP discovery、browser session 和 page session，任意页面级 CDP method/event 通过扩展透明转发。
+Chrome does not need remote-debugging launch arguments or an exposed remote-debugging port. CDP clients connect only to the daemon. The daemon provides standard CDP discovery, browser sessions, and page sessions, while the extension transparently forwards page-level CDP methods and events.
 
-## 安装
+## Installation
 
-需要 [`uv`](https://docs.astral.sh/uv/) 和 Chrome。项目要求 Python 3.9+；如果本机没有合适的 Python，`uv` 会自动准备。
+WebBridge requires [`uv`](https://docs.astral.sh/uv/) and Chrome. The Python package requires Python 3.9 or newer; `uv` can provision a compatible Python version when needed.
 
-### 1. 全局安装 CLI
+### 1. Install the CLI globally
 
-在项目根目录执行：
+Run this command from the project root:
 
 ```bash
 uv tool install .
 webbridge --version
 ```
 
-`uv` 会把 `webbridge` 安装到独立环境，并把命令链接到用户级可执行目录。安装后可以在任意目录直接运行 `webbridge`。
+`uv` installs WebBridge in an isolated environment and links the command into the user executable directory. The `webbridge` command can then be used from any directory.
 
-如果终端提示找不到 `webbridge`，执行：
+If the shell cannot find `webbridge`, run:
 
 ```bash
 uv tool update-shell
 ```
 
-然后重新打开终端。可用 `uv tool dir --bin` 查看全局命令目录。
+Restart the terminal afterward. Run `uv tool dir --bin` to show the global executable directory.
 
-本地代码更新后，在项目根目录重新执行安装即可替换旧版本：
+To replace an existing installation after updating the local source, run the installation command again from the project root:
 
 ```bash
 uv tool install .
 ```
 
-卸载：
+To uninstall the CLI:
 
 ```bash
 uv tool uninstall webbridge
 ```
 
-### 2. 安装 Chrome 扩展
+### 2. Install the Chrome extension
 
-1. 打开 `chrome://extensions`。
-2. 开启「开发者模式」。
-3. 点击「加载已解压的扩展程序」。
-4. 选择本项目的 `extension` 目录。
+1. Open `chrome://extensions`.
+2. Enable **Developer mode**.
+3. Click **Load unpacked**.
+4. Select the `extension` directory from this repository.
 
-CLI 和扩展需要分别安装；`uv tool install .` 不会自动修改 Chrome。
+The CLI and extension are installed separately. `uv tool install .` does not modify Chrome.
 
-## 运行
+## Running WebBridge
 
-启动并检查 daemon：
+Start the daemon and inspect its status:
 
 ```bash
 webbridge start
 webbridge status
 ```
 
-全部生命周期命令：
+Available lifecycle commands:
 
 ```bash
 webbridge start
@@ -76,29 +76,31 @@ webbridge stop
 webbridge status
 ```
 
-daemon 会在后台运行，固定监听 `127.0.0.1:9333`，不会暴露到局域网。日志位于 `~/.webbridge/daemon.log`。
+The daemon runs in the background and listens only on `127.0.0.1:9222`; it is not exposed to the local network. On Windows, it starts without opening a console window. Logs are written to `~/.webbridge/daemon.log`.
 
-扩展会自动连接 daemon。扩展图标显示 `ON` 表示连接成功；点击扩展图标可查看 Daemon、浏览器连接、CDP 客户端和可调试页面数量，也可访问 `http://127.0.0.1:9333/` 查看原始状态。CDP client 开始使用某个标签页后，Chrome 会显示该标签页正在被调试的提示，不需要额外点击授权。
+The extension connects to the daemon automatically. An `ON` badge indicates a successful connection. Click the extension icon to view daemon status, browser connection status, CDP client count, and debuggable page count. The raw status is also available at `http://127.0.0.1:9222/`.
 
-## 使用 CDP
+Chrome displays its standard debugging banner after a CDP client starts using a tab. No additional authorization click is required.
 
-任何接受 CDP port 或 URL 的程序都可以直接连接 `9333`：
+## Connecting CDP clients
+
+Any program that accepts a CDP port or URL can connect directly to port `9222`:
 
 ```bash
-agent-browser --cdp 9333 open https://example.com
-agent-browser --cdp 9333 snapshot
+agent-browser --cdp 9222 open https://example.com
+agent-browser --cdp 9222 snapshot
 ```
 
-可用的标准入口：
+Standard endpoints:
 
-- `http://127.0.0.1:9333/json/version`
-- `http://127.0.0.1:9333/json/list`
-- `ws://127.0.0.1:9333/devtools/browser/webbridge`
-- `/json/list` 返回的 `ws://.../devtools/page/<targetId>`
+- `http://127.0.0.1:9222/json/version`
+- `http://127.0.0.1:9222/json/list`
+- `ws://127.0.0.1:9222/devtools/browser/webbridge`
+- The `ws://.../devtools/page/<targetId>` URLs returned by `/json/list`
 
-daemon 支持 `Target.setAutoAttach`、target 创建/关闭/激活、扁平 session 路由以及 browser/page CDP WebSocket。扩展断开时，已有 CDP 连接会立即关闭；扩展会持续自动重连。
+The daemon supports `Target.setAutoAttach`, target creation, closing and activation, flattened session routing, and browser/page CDP WebSockets. Existing CDP connections close immediately when the extension disconnects, and the extension keeps reconnecting automatically.
 
-## 开发验证
+## Development and validation
 
 ```bash
 uv sync
@@ -107,10 +109,10 @@ uv run --with pytest pytest -q
 uv build
 ```
 
-测试覆盖 discovery、browser CDP session、page CDP session、任意命令响应和 CDP event 回传。真实验收命令是：
+Tests cover discovery, browser CDP sessions, page CDP sessions, arbitrary command responses, and CDP event forwarding. Real-browser acceptance commands:
 
 ```bash
-agent-browser --cdp 9333 open https://example.com
-agent-browser --cdp 9333 get title
-agent-browser --cdp 9333 snapshot
+agent-browser --cdp 9222 open https://example.com
+agent-browser --cdp 9222 get title
+agent-browser --cdp 9222 snapshot
 ```

@@ -1,4 +1,4 @@
-const STATUS_URL = "http://127.0.0.1:9333/";
+const STATUS_URL = "http://127.0.0.1:9222/";
 const REFRESH_INTERVAL_MS = 2000;
 
 const statusLabel = document.querySelector("#status-label");
@@ -16,7 +16,7 @@ function showStatus(state, label, detail, status = null) {
   statusDetail.textContent = detail;
   clientCount.textContent = status?.cdpClients ?? "—";
   targetCount.textContent = status?.pageTargets ?? status?.targets ?? "—";
-  updatedAt.textContent = `刚刚更新 · ${new Date().toLocaleTimeString("zh-CN", {
+  updatedAt.textContent = `Updated just now · ${new Date().toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -62,23 +62,23 @@ async function refreshStatus() {
     if (status.extensionConnected) {
       showStatus(
         "connected",
-        "已连接",
-        "浏览器扩展已连接到 Daemon",
+        "Connected",
+        "The browser extension is connected to the daemon",
         status,
       );
     } else {
       showStatus(
         "waiting",
-        "等待浏览器连接",
-        "Daemon 正在运行，扩展正在重连",
+        "Waiting for browser",
+        "The daemon is running; the extension is reconnecting",
         status,
       );
     }
   } catch {
     showStatus(
       "offline",
-      "Daemon 未运行",
-      "请先运行 webbridge start",
+      "Daemon is not running",
+      "Run webbridge start first",
     );
   } finally {
     clearTimeout(timeout);

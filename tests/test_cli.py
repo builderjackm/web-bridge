@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -28,7 +29,7 @@ class LifecycleCliTests(unittest.TestCase):
     def test_status_reports_daemon_and_extension(self, output: Mock, _: Mock) -> None:
         self.assertEqual(cli.run(["status"]), 0)
         lines = [call.args[0] for call in output.call_args_list]
-        self.assertIn("Daemon: running (pid 42, http://127.0.0.1:9333/)", lines)
+        self.assertIn("Daemon: running (pid 42, http://127.0.0.1:9222/)", lines)
         self.assertIn("Extension: connected", lines)
         self.assertIn("Page targets: 2", lines)
 
@@ -61,6 +62,22 @@ class LifecycleCliTests(unittest.TestCase):
         self.assertEqual(cli.run(["restart"]), 0)
         stop.assert_called_once_with()
         start.assert_called_once_with()
+
+    def test_windows_spawn_does_not_open_a_console_window(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_dir = Path(directory)
+            log_file = state_dir / "daemon.log"
+            with (
+                patch.object(cli, "STATE_DIR", state_dir),
+                patch.object(cli, "LOG_FILE", log_file),
+                patch.object(cli.os, "name", "nt"),
+                patch.object(cli.subprocess, "Popen") as popen,
+            ):
+                cli._spawn_daemon()
+
+        _, kwargs = popen.call_args
+        self.assertEqual(kwargs["creationflags"], cli.WINDOWS_CREATE_NO_WINDOW)
+        self.assertNotIn("start_new_session", kwargs)
 
 
 if __name__ == "__main__":
