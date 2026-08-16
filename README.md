@@ -1,118 +1,116 @@
-# Web Bridge CLI
+# WebBridge CDP
 
-`webbridge` 是 Kimi Web Bridge 的纯命令行客户端，用命令替代手写 `curl` 和 JSON。它直接请求现有 daemon：
+WebBridge CDP 把用户当前的 Chrome 暴露为一个本机标准 CDP endpoint。项目只包含两个组件：
 
 ```text
-webbridge CLI ──HTTP──> 127.0.0.1:10086/command ──> 现有浏览器扩展 ──> 页面
+CDP client ──HTTP/WebSocket──> 127.0.0.1:9333 daemon
+                                      ▲
+                                      │ WebSocket（扩展主动连接）
+                                      │
+                                Chrome Extension
+                                      │
+                                chrome.debugger API
 ```
 
-本项目只包含客户端，不再提供 daemon、浏览器扩展或 daemon 管理命令。使用前需先安装 Kimi Web Bridge；官方说明见 [Web Bridge 中文页面](https://www.kimi.com/zh-cn/features/webbridge)。
+不需要给 Chrome 增加远程调试启动参数，也不需要启用 Chrome 的远程调试端口。CDP client 只连接 daemon；daemon 负责标准 CDP discovery、browser session 和 page session，任意页面级 CDP method/event 通过扩展透明转发。
 
 ## 安装
 
-需要 Python 3.9+ 和 [`uv`](https://docs.astral.sh/uv/)。在项目目录安装用户级全局命令：
+需要 [`uv`](https://docs.astral.sh/uv/) 和 Chrome。项目要求 Python 3.9+；如果本机没有合适的 Python，`uv` 会自动准备。
+
+### 1. 全局安装 CLI
+
+在项目根目录执行：
 
 ```bash
 uv tool install .
 webbridge --version
 ```
 
-`uv tool install` 使用独立的用户级环境，不需要 `sudo`，也不会修改系统 Python。如果 shell 找不到命令：
+`uv` 会把 `webbridge` 安装到独立环境，并把命令链接到用户级可执行目录。安装后可以在任意目录直接运行 `webbridge`。
+
+如果终端提示找不到 `webbridge`，执行：
 
 ```bash
 uv tool update-shell
 ```
 
-更新与卸载：
+然后重新打开终端。可用 `uv tool dir --bin` 查看全局命令目录。
+
+本地代码更新后，在项目根目录重新执行安装即可替换旧版本：
 
 ```bash
-uv tool install --force .
+uv tool install .
+```
+
+卸载：
+
+```bash
 uv tool uninstall webbridge
 ```
 
-## 用法
+### 2. 安装 Chrome 扩展
 
-```text
-webbridge [--endpoint URL] [--timeout SECONDS] SESSION COMMAND [ARGS...]
-```
+1. 打开 `chrome://extensions`。
+2. 开启「开发者模式」。
+3. 点击「加载已解压的扩展程序」。
+4. 选择本项目的 `extension` 目录。
 
-一个任务始终使用同一个 `SESSION`。全局选项必须放在 `SESSION` 之前。
+CLI 和扩展需要分别安装；`uv tool install .` 不会自动修改 Chrome。
 
-| 命令 | 参数 |
-| --- | --- |
-| `navigate` | `URL [--new-tab] [--group-title TITLE]` |
-| `find_tab` | `URL [--active]` |
-| `snapshot` | 无 |
-| `click` | `SELECTOR` |
-| `fill` | `SELECTOR VALUE` |
-| `mouse_click` | `SELECTOR` |
-| `evaluate` | `CODE` |
-| `key_type` | `TEXT` |
-| `send_keys` | `KEYS [--repeat 1-100]` |
-| `cdp` | `METHOD [PARAMS_JSON]` |
-| `screenshot` | `[--format png\|jpeg] [--quality 0-100] [--selector SELECTOR] [--path PATH]` |
-| `network` | `start\|stop\|list\|detail [--filter FILTER] [--request-id ID]` |
-| `upload` | `SELECTOR FILE [FILE ...]` |
-| `save_as_pdf` | `[--paper-format FORMAT] [--landscape] [--scale N] [--no-print-background] [--path PATH]` |
-| `list_tabs` | 无 |
-| `close_tab` | 无 |
-| `close_session` | 无 |
+## 运行
 
-常用示例：
+启动并检查 daemon：
 
 ```bash
-webbridge research navigate https://example.com --new-tab --group-title "资料调研"
-webbridge research snapshot
-webbridge research click @e42
-webbridge research fill @e51 "中文内容"
-webbridge research mouse_click @e42
-webbridge research key_type "literal text"
-webbridge research send_keys "Mod+A"
-webbridge research evaluate 'JSON.stringify({url: location.href})'
-webbridge research cdp Runtime.evaluate '{"expression":"document.title","returnByValue":true}'
-webbridge research screenshot --format jpeg --quality 60
-webbridge research save_as_pdf --paper-format a4 --path /tmp/page.pdf
-webbridge research list_tabs
+webbridge start
+webbridge status
 ```
 
-以 `-` 开头的文本参数前面使用 `--`：
+全部生命周期命令：
 
 ```bash
-webbridge research key_type -- -literal
+webbridge start
+webbridge restart
+webbridge stop
+webbridge status
 ```
 
-默认 endpoint 是 `http://127.0.0.1:10086/command`。可通过全局参数或环境变量覆盖：
+daemon 会在后台运行，固定监听 `127.0.0.1:9333`，不会暴露到局域网。日志位于 `~/.webbridge/daemon.log`。
+
+扩展会自动连接 daemon。扩展图标显示 `ON` 表示连接成功；点击扩展图标可查看 Daemon、浏览器连接、CDP 客户端和可调试页面数量，也可访问 `http://127.0.0.1:9333/` 查看原始状态。CDP client 开始使用某个标签页后，Chrome 会显示该标签页正在被调试的提示，不需要额外点击授权。
+
+## 使用 CDP
+
+任何接受 CDP port 或 URL 的程序都可以直接连接 `9333`：
 
 ```bash
-webbridge --endpoint http://127.0.0.1:10086/command research snapshot
-WEBBRIDGE_URL=http://127.0.0.1:10086/command webbridge research snapshot
+agent-browser --cdp 9333 open https://example.com
+agent-browser --cdp 9333 snapshot
 ```
 
-使用默认 endpoint 时，如果 daemon 连接不上，CLI 会自动执行一次已安装 daemon 的 `start` 命令，然后重试原请求：
+可用的标准入口：
 
-```text
-macOS / Linux: ~/.kimi-webbridge/bin/kimi-webbridge start
-Windows:        %USERPROFILE%\.kimi-webbridge\bin\kimi-webbridge.exe start
-```
+- `http://127.0.0.1:9333/json/version`
+- `http://127.0.0.1:9333/json/list`
+- `ws://127.0.0.1:9333/devtools/browser/webbridge`
+- `/json/list` 返回的 `ws://.../devtools/page/<targetId>`
 
-只有连接错误会触发自动启动。HTTP 错误、浏览器扩展未连接或 action 执行失败不会启动 daemon；自定义 endpoint 也不会触发本机 daemon。
+daemon 支持 `Target.setAutoAttach`、target 创建/关闭/激活、扁平 session 路由以及 browser/page CDP WebSocket。扩展断开时，已有 CDP 连接会立即关闭；扩展会持续自动重连。
 
-`webbridge --help` 内置完整使用手册。手册保持 Web Bridge 文案，将原始 HTTP 示例逐项改写为 CLI，并补充执行层支持的 `mouse_click`、`key_type` 和 `send_keys`。
-
-## 直接用 uv 脚本运行
-
-不安装全局命令也可以运行根目录的 PEP 723 脚本；它没有第三方 Python 依赖：
+## 开发验证
 
 ```bash
-uv run webbridge.py --help
-uv run webbridge.py my-task snapshot
-```
-
-## 开发与验证
-
-```bash
+uv sync
+uv run webbridge --help
 uv run --with pytest pytest -q
 uv build
 ```
 
-测试覆盖 17 个 action 的参数转换、UTF-8 JSON、连接失败自动启动与重试、HTTP 错误和帮助文档完整性。
+测试覆盖 discovery、browser CDP session、page CDP session、任意命令响应和 CDP event 回传。真实验收命令是：
+
+```bash
+agent-browser --cdp 9333 open https://example.com
+agent-browser --cdp 9333 get title
+agent-browser --cdp 9333 snapshot
+```

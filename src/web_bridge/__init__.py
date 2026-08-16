@@ -1,3 +1,3 @@
-"""Web Bridge CLI wrapper."""
+"""Local Chrome extension to CDP bridge."""
 
-__version__ = "1.11.5"
+__version__ = "0.1.0"

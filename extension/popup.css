@@ -1,0 +1,261 @@
+:root {
+  color-scheme: light;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  font-synthesis: none;
+  --background: #f7f8fa;
+  --surface: #ffffff;
+  --text: #17191f;
+  --muted: #69707d;
+  --border: #e5e8ed;
+  --green: #16803c;
+  --green-soft: #edf8f1;
+  --green-border: #cdebd7;
+  --amber: #a85b00;
+  --amber-soft: #fff7e8;
+  --amber-border: #f2ddb3;
+  --red: #b42318;
+  --red-soft: #fff1f0;
+  --red-border: #f3cfcc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 320px;
+  min-width: 320px;
+  background: var(--background);
+  color: var(--text);
+}
+
+button {
+  font: inherit;
+}
+
+.popup {
+  width: 320px;
+  padding: 20px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 18px;
+}
+
+.brand-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #dce2e8;
+  border-radius: 11px;
+  background: var(--surface);
+  color: #313640;
+  box-shadow: 0 2px 7px rgb(19 30 45 / 7%);
+}
+
+.brand-mark svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.header h1 {
+  margin: 0 0 2px;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
+
+.connection {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  min-height: 72px;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #8b929d;
+  box-shadow: 0 0 0 4px rgb(139 146 157 / 13%);
+}
+
+.status-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.status-copy strong {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.status-copy span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+body[data-state="connected"] .connection {
+  border-color: var(--green-border);
+  background: var(--green-soft);
+}
+
+body[data-state="connected"] .status-dot {
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgb(22 128 60 / 13%);
+}
+
+body[data-state="waiting"] .connection {
+  border-color: var(--amber-border);
+  background: var(--amber-soft);
+}
+
+body[data-state="waiting"] .status-dot {
+  background: var(--amber);
+  box-shadow: 0 0 0 4px rgb(168 91 0 / 12%);
+}
+
+body[data-state="offline"] .connection {
+  border-color: var(--red-border);
+  background: var(--red-soft);
+}
+
+body[data-state="offline"] .status-dot {
+  background: var(--red);
+  box-shadow: 0 0 0 4px rgb(180 35 24 / 11%);
+}
+
+.details {
+  margin: 14px 0 0;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-row:last-child {
+  border-bottom: 0;
+}
+
+.detail-row dt,
+.detail-row dd {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.detail-row dt {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.detail-row dd {
+  color: #343943;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  margin-top: 10px;
+  color: #8a919c;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.footer button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #68707c;
+  cursor: pointer;
+}
+
+.footer button:hover {
+  background: #e9ecf0;
+  color: #292e37;
+}
+
+.footer button:focus-visible {
+  outline: 2px solid #5995df;
+  outline-offset: 1px;
+}
+
+.footer button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.footer button[data-loading="true"] svg {
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

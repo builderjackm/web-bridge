@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "WebBridge CDP",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "description": "Expose this Chrome instance through a local CDP daemon.",
+  "permissions": ["debugger", "offscreen", "tabs"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "WebBridge CDP",
+    "default_popup": "popup.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src ws://127.0.0.1:9333 http://127.0.0.1:9333"
+  }
+}

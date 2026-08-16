@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebBridge 状态</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body data-state="checking">
+    <main class="popup">
+      <header class="header">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="img">
+            <rect x="2.75" y="6.25" width="7.5" height="11.5" rx="2.5" />
+            <rect x="13.75" y="6.25" width="7.5" height="11.5" rx="2.5" />
+            <path d="M9.75 12h4.5" />
+          </svg>
+        </div>
+        <div>
+          <h1>WebBridge</h1>
+          <p>Chrome CDP Bridge</p>
+        </div>
+      </header>
+
+      <section class="connection" aria-live="polite" aria-atomic="true">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div class="status-copy">
+          <strong id="status-label">正在检查连接</strong>
+          <span id="status-detail">连接到本机 Daemon…</span>
+        </div>
+      </section>
+
+      <dl class="details">
+        <div class="detail-row">
+          <dt>Daemon</dt>
+          <dd>127.0.0.1:9333</dd>
+        </div>
+        <div class="detail-row">
+          <dt>CDP 客户端</dt>
+          <dd id="client-count">—</dd>
+        </div>
+        <div class="detail-row">
+          <dt>可调试页面</dt>
+          <dd id="target-count">—</dd>
+        </div>
+      </dl>
+
+      <footer class="footer">
+        <span id="updated-at">正在刷新</span>
+        <button id="refresh" type="button" aria-label="刷新连接状态">
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M15.25 6.5A6 6 0 1 0 16 11" />
+            <path d="M12.5 6.5h2.75V3.75" />
+          </svg>
+        </button>
+      </footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
