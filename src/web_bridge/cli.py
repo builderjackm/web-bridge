@@ -56,7 +56,40 @@ def _remove_pid() -> None:
         pass
 
 
+def _windows_pid_alive(pid: int) -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    process_synchronize = 0x00100000
+    wait_object_0 = 0x00000000
+    error_invalid_parameter = 87
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    open_process = kernel32.OpenProcess
+    open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    open_process.restype = wintypes.HANDLE
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+    wait_for_single_object = kernel32.WaitForSingleObject
+    wait_for_single_object.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    wait_for_single_object.restype = wintypes.DWORD
+
+    handle = open_process(process_synchronize, False, pid)
+    if not handle:
+        # Access denied means the process exists but cannot be inspected. An
+        # invalid PID is the normal Windows result for an exited process.
+        return ctypes.get_last_error() != error_invalid_parameter
+    try:
+        return wait_for_single_object(handle, 0) != wait_object_0
+    finally:
+        close_handle(handle)
+
+
 def _pid_alive(pid: int) -> bool:
+    if os.name == "nt":
+        return _windows_pid_alive(pid)
+
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -64,6 +97,17 @@ def _pid_alive(pid: int) -> bool:
     except PermissionError:
         return True
     return True
+
+
+def _daemon_executable() -> str:
+    if os.name != "nt":
+        return sys.executable
+
+    # A virtual-environment python.exe can start the base console interpreter in
+    # a second process, which bypasses CREATE_NO_WINDOW and opens Windows Terminal.
+    # The sibling pythonw.exe uses the windowless subsystem for both processes.
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    return str(pythonw) if pythonw.is_file() else sys.executable
 
 
 def _spawn_daemon() -> subprocess.Popen[bytes]:
@@ -80,7 +124,7 @@ def _spawn_daemon() -> subprocess.Popen[bytes]:
         else:
             kwargs["start_new_session"] = True
         return subprocess.Popen(
-            [sys.executable, "-m", "web_bridge.daemon"],
+            [_daemon_executable(), "-m", "web_bridge.daemon"],
             **kwargs,
         )
 
@@ -100,7 +144,12 @@ def start() -> int:
     while time.monotonic() < deadline:
         current = _status_payload(timeout=0.25)
         if current:
-            print(f"WebBridge daemon started (pid {current.get('pid', process.pid)}).")
+            daemon_pid = current.get("pid")
+            if isinstance(daemon_pid, int):
+                _write_pid(daemon_pid)
+            else:
+                daemon_pid = process.pid
+            print(f"WebBridge daemon started (pid {daemon_pid}).")
             if not current.get("extensionConnected"):
                 print("Browser extension is not connected yet.")
             return 0

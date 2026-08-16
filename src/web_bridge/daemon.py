@@ -22,6 +22,18 @@ RPC_TIMEOUT = 120.0
 LOGGER = logging.getLogger("webbridge")
 
 
+def _log_extension_diagnostic(record: Any) -> None:
+    if not isinstance(record, dict):
+        return
+    serialized = json.dumps(
+        record,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    )
+    LOGGER.info("extension diagnostic %s", serialized[:4000])
+
+
 class BridgeError(RuntimeError):
     """An error safe to return to a local CDP client."""
 
@@ -250,6 +262,15 @@ class BridgeState:
         return result
 
     async def handle_extension_event(self, method: str, params: List[Any]) -> None:
+        if method == "bridge.log":
+            if params:
+                _log_extension_diagnostic(params[0])
+            return
+        if method == "bridge.logs":
+            records = params[0] if params and isinstance(params[0], list) else []
+            for record in records[-200:]:
+                _log_extension_diagnostic(record)
+            return
         if method == "bridge.ready":
             if params and isinstance(params[0], dict):
                 self._apply_ready(params[0])
@@ -626,6 +647,11 @@ class BridgeState:
 
         if method == "Browser.getVersion":
             return self.browser_version_result()
+        if method == "Browser.setDownloadBehavior":
+            # Playwright configures downloads while connecting over CDP. The
+            # chrome.debugger API does not expose this Browser-domain method,
+            # and page navigation does not depend on it.
+            return {}
         if method == "Target.setAutoAttach":
             await self.enable_auto_attach(client)
             return {}
@@ -785,7 +811,11 @@ async def extension_socket(request: web.Request) -> web.WebSocketResponse:
                 await state.handle_extension_event(method, params)
     finally:
         await state.remove_extension(connection)
-        LOGGER.info("browser extension disconnected")
+        LOGGER.info(
+            "browser extension disconnected (close_code=%s, exception=%r)",
+            socket.close_code,
+            socket.exception(),
+        )
     return socket
 
 
@@ -858,8 +888,11 @@ def create_app(state: Optional[BridgeState] = None) -> web.Application:
     app[STATE_KEY] = state or BridgeState()
     app.router.add_get("/", status)
     app.router.add_get("/json/version", json_version)
+    app.router.add_get("/json/version/", json_version)
     app.router.add_get("/json", json_list)
+    app.router.add_get("/json/", json_list)
     app.router.add_get("/json/list", json_list)
+    app.router.add_get("/json/list/", json_list)
     app.router.add_route("*", "/json/new", json_new)
     app.router.add_get("/json/activate/{target_id}", json_activate)
     app.router.add_get("/json/close/{target_id}", json_close)

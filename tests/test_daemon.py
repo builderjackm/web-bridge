@@ -145,23 +145,26 @@ class DaemonIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["pid"], os.getpid())
         self.assertEqual(status["pageTargets"], 1)
 
-        async with self.session.get(f"{self.base_url}/json/version") as response:
-            self.assertEqual(response.status, 200)
-            version = await response.json()
-        self.assertEqual(version["Protocol-Version"], "1.3")
-        self.assertEqual(
-            version["webSocketDebuggerUrl"],
-            f"ws://127.0.0.1:{self.port}/devtools/browser/webbridge",
-        )
+        for path in ("/json/version", "/json/version/"):
+            async with self.session.get(f"{self.base_url}{path}") as response:
+                self.assertEqual(response.status, 200)
+                version = await response.json()
+            self.assertEqual(version["Protocol-Version"], "1.3")
+            self.assertEqual(
+                version["webSocketDebuggerUrl"],
+                f"ws://127.0.0.1:{self.port}/devtools/browser/webbridge",
+            )
 
-        async with self.session.get(f"{self.base_url}/json/list") as response:
-            targets = await response.json()
-        self.assertEqual(len(targets), 1)
-        self.assertEqual(targets[0]["id"], "page-7")
-        self.assertEqual(
-            targets[0]["webSocketDebuggerUrl"],
-            f"ws://127.0.0.1:{self.port}/devtools/page/page-7",
-        )
+        for path in ("/json", "/json/", "/json/list", "/json/list/"):
+            async with self.session.get(f"{self.base_url}{path}") as response:
+                self.assertEqual(response.status, 200)
+                targets = await response.json()
+            self.assertEqual(len(targets), 1)
+            self.assertEqual(targets[0]["id"], "page-7")
+            self.assertEqual(
+                targets[0]["webSocketDebuggerUrl"],
+                f"ws://127.0.0.1:{self.port}/devtools/page/page-7",
+            )
 
     async def test_browser_session_routes_commands_and_events(self) -> None:
         cdp = await self.session.ws_connect(
@@ -170,6 +173,15 @@ class DaemonIntegrationTests(unittest.IsolatedAsyncioTestCase):
         await cdp.send_json({"id": 1, "method": "Browser.getVersion"})
         version_response = await cdp.receive_json()
         self.assertEqual(version_response["result"]["product"], "Chrome/140.0.0.0")
+
+        await cdp.send_json(
+            {
+                "id": 11,
+                "method": "Browser.setDownloadBehavior",
+                "params": {"behavior": "allowAndName", "eventsEnabled": True},
+            }
+        )
+        self.assertEqual(await cdp.receive_json(), {"id": 11, "result": {}})
 
         await cdp.send_json(
             {
@@ -232,6 +244,23 @@ class DaemonIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response["result"]["result"]["value"], "forwarded")
         await cdp.close()
 
+    async def test_extension_diagnostics_are_written_to_the_daemon_log(self) -> None:
+        record = {
+            "timestamp": "2026-08-16T08:00:00.000Z",
+            "instanceId": "worker-test",
+            "event": "socket.close",
+            "details": {"code": 1006, "wasClean": False},
+        }
+        with self.assertLogs("webbridge", level="INFO") as captured:
+            await self.extension.emit("bridge.log", [record])
+            for _ in range(50):
+                if any("worker-test" in line for line in captured.output):
+                    break
+                await asyncio.sleep(0.01)
+
+        self.assertTrue(any("worker-test" in line for line in captured.output))
+        self.assertTrue(any("socket.close" in line for line in captured.output))
+
 
 class ExtensionManifestTests(unittest.TestCase):
     def test_extension_is_minimal_and_targets_the_daemon(self) -> None:
@@ -240,13 +269,20 @@ class ExtensionManifestTests(unittest.TestCase):
         )
         self.assertEqual(manifest["manifest_version"], 3)
         self.assertEqual(
-            set(manifest["permissions"]), {"debugger", "offscreen", "tabs"}
+            set(manifest["permissions"]),
+            {"alarms", "debugger", "storage", "tabs"},
         )
         self.assertEqual(manifest["action"]["default_popup"], "popup.html")
-        transport = (PROJECT_ROOT / "extension" / "offscreen.js").read_text(
+        transport = (PROJECT_ROOT / "extension" / "background.js").read_text(
             encoding="utf-8"
         )
         self.assertIn("ws://127.0.0.1:9222/extension", transport)
+        self.assertIn("bridge.ping", transport)
+        self.assertIn("chrome.alarms", transport)
+        self.assertIn("chrome.storage.local", transport)
+        self.assertIn("bridge.logs", transport)
+        self.assertFalse((PROJECT_ROOT / "extension" / "offscreen.html").exists())
+        self.assertFalse((PROJECT_ROOT / "extension" / "offscreen.js").exists())
         popup = (PROJECT_ROOT / "extension" / "popup.js").read_text(encoding="utf-8")
         self.assertIn("http://127.0.0.1:9222/", popup)
 

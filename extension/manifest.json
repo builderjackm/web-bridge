@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "minimum_chrome_version": "116",
   "description": "Expose this Chrome instance through a local CDP daemon.",
-  "permissions": ["debugger", "offscreen", "tabs"],
+  "permissions": ["alarms", "debugger", "storage", "tabs"],
   "host_permissions": ["http://127.0.0.1/*"],
   "background": {
     "service_worker": "background.js"
