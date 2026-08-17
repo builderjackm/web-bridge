@@ -113,8 +113,6 @@ class FakeExtension:
             return {}
         if method == "chrome.tabs.update":
             return self.tab
-        if method == "chrome.windows.update":
-            return {"id": 1, "focused": True}
         if method == "chrome.tabs.create":
             return self.tab
         raise AssertionError(f"unexpected extension RPC: {method}")
@@ -165,6 +163,16 @@ class DaemonIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 targets[0]["webSocketDebuggerUrl"],
                 f"ws://127.0.0.1:{self.port}/devtools/page/page-7",
             )
+
+    async def test_activating_a_target_never_raises_the_browser_window(self) -> None:
+        async with self.session.get(
+            f"{self.base_url}/json/activate/page-7"
+        ) as response:
+            self.assertEqual(response.status, 200)
+
+        methods = [command["method"] for command in self.extension.commands]
+        self.assertIn("chrome.tabs.update", methods)
+        self.assertNotIn("chrome.windows.update", methods)
 
     async def test_browser_session_routes_commands_and_events(self) -> None:
         cdp = await self.session.ws_connect(
@@ -261,6 +269,22 @@ class DaemonIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("worker-test" in line for line in captured.output))
         self.assertTrue(any("socket.close" in line for line in captured.output))
 
+    async def test_extension_socket_accepts_a_message_over_four_megabytes(self) -> None:
+        record = {
+            "marker": "large-extension-message",
+            "payload": "x" * (4 * 1024 * 1024),
+        }
+        with self.assertLogs("webbridge", level="INFO") as captured:
+            await self.extension.emit("bridge.log", [record])
+            for _ in range(100):
+                if any("large-extension-message" in line for line in captured.output):
+                    break
+                await asyncio.sleep(0.01)
+
+        self.assertTrue(
+            any("large-extension-message" in line for line in captured.output)
+        )
+
 
 class ExtensionManifestTests(unittest.TestCase):
     def test_extension_is_minimal_and_targets_the_daemon(self) -> None:
@@ -270,7 +294,7 @@ class ExtensionManifestTests(unittest.TestCase):
         self.assertEqual(manifest["manifest_version"], 3)
         self.assertEqual(
             set(manifest["permissions"]),
-            {"alarms", "debugger", "storage", "tabs"},
+            {"alarms", "debugger", "storage", "tabGroups", "tabs"},
         )
         self.assertEqual(manifest["action"]["default_popup"], "popup.html")
         transport = (PROJECT_ROOT / "extension" / "background.js").read_text(
@@ -281,6 +305,12 @@ class ExtensionManifestTests(unittest.TestCase):
         self.assertIn("chrome.alarms", transport)
         self.assertIn("chrome.storage.local", transport)
         self.assertIn("bridge.logs", transport)
+        self.assertIn("sanitizeTab", transport)
+        self.assertIn("sanitizeTarget", transport)
+        self.assertIn("chrome.tabs.group", transport)
+        self.assertIn("chrome.tabGroups.update", transport)
+        self.assertIn("active: false", transport)
+        self.assertNotIn("chrome.windows.update", transport)
         self.assertFalse((PROJECT_ROOT / "extension" / "offscreen.html").exists())
         self.assertFalse((PROJECT_ROOT / "extension" / "offscreen.js").exists())
         popup = (PROJECT_ROOT / "extension" / "popup.js").read_text(encoding="utf-8")

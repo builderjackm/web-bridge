@@ -4,15 +4,75 @@ const RECONNECT_MAX_MS = 10000;
 const HEARTBEAT_MS = 20000;
 const LOG_STORAGE_KEY = "webbridgeDiagnosticLogs";
 const LOG_LIMIT = 200;
+const MAX_TITLE_LENGTH = 4096;
+const MAX_URL_LENGTH = 65536;
 const WORKER_INSTANCE_ID = crypto.randomUUID();
+const AGENT_GROUP_TITLE = "Agent";
+const AGENT_GROUP_COLOR = "blue";
 
 const bridgeAttachedTabs = new Set();
+const bridgeCreatedTabs = new Set();
+const agentGroupByWindow = new Map();
 
 let socket = null;
 let reconnectTimer = null;
 let heartbeatTimer = null;
 let reconnectDelay = 500;
 let logWriteChain = Promise.resolve();
+
+function compactTitle(value) {
+  if (typeof value !== "string") return "";
+  return value.length <= MAX_TITLE_LENGTH
+    ? value
+    : `${value.slice(0, MAX_TITLE_LENGTH - 1)}…`;
+}
+
+function compactUrl(value) {
+  if (typeof value !== "string" || value.length > MAX_URL_LENGTH) return "";
+  return value;
+}
+
+function sanitizeTab(tab) {
+  if (!tab || !Number.isInteger(tab.id)) return null;
+  const sanitized = {
+    id: tab.id,
+    title: compactTitle(tab.title),
+    url: compactUrl(tab.url || tab.pendingUrl),
+  };
+  if (Number.isInteger(tab.windowId)) sanitized.windowId = tab.windowId;
+  return sanitized;
+}
+
+function sanitizeTarget(target) {
+  if (!target || typeof target !== "object") return null;
+  const targetId = typeof target.id === "string"
+    ? target.id
+    : target.targetId;
+  if (typeof targetId !== "string") return null;
+  const sanitized = {
+    id: targetId,
+    targetId,
+    type: typeof target.type === "string" ? target.type : "page",
+    title: compactTitle(target.title),
+    url: compactUrl(target.url),
+    attached: Boolean(target.attached),
+  };
+  if (Number.isInteger(target.tabId)) sanitized.tabId = target.tabId;
+  return sanitized;
+}
+
+function sanitizeRpcResult(method, result) {
+  if (method === "chrome.tabs.create" || method === "chrome.tabs.update") {
+    return sanitizeTab(result);
+  }
+  if (method === "chrome.tabs.query" && Array.isArray(result)) {
+    return result.map(sanitizeTab).filter(Boolean);
+  }
+  if (method === "chrome.debugger.getTargets" && Array.isArray(result)) {
+    return result.map(sanitizeTarget).filter(Boolean);
+  }
+  return result;
+}
 
 function send(payload) {
   if (socket?.readyState !== WebSocket.OPEN) return false;
@@ -123,16 +183,74 @@ async function detachBridgeTabs() {
   return tabIds.size;
 }
 
+async function resolveAgentGroup(windowId) {
+  const cached = agentGroupByWindow.get(windowId);
+  if (Number.isInteger(cached)) {
+    try {
+      const group = await chrome.tabGroups.get(cached);
+      if (group.windowId === windowId) return cached;
+    } catch {
+      // The group was dissolved; look for another one below.
+    }
+    agentGroupByWindow.delete(windowId);
+  }
+  const existing = await chrome.tabGroups.query({
+    windowId,
+    title: AGENT_GROUP_TITLE,
+  });
+  if (existing.length === 0) return null;
+  agentGroupByWindow.set(windowId, existing[0].id);
+  return existing[0].id;
+}
+
+async function groupAgentTab(tab) {
+  if (!Number.isInteger(tab?.id) || !Number.isInteger(tab.windowId)) return;
+  const windowId = tab.windowId;
+  const groupId = await resolveAgentGroup(windowId);
+  const options = groupId === null
+    ? { tabIds: tab.id, createProperties: { windowId } }
+    : { tabIds: tab.id, groupId };
+  const resolved = await chrome.tabs.group(options);
+  agentGroupByWindow.set(windowId, resolved);
+  if (resolved !== groupId) {
+    await chrome.tabGroups.update(resolved, {
+      title: AGENT_GROUP_TITLE,
+      color: AGENT_GROUP_COLOR,
+    });
+  }
+}
+
+async function trackAgentTab(tab) {
+  if (!Number.isInteger(tab?.id)) return;
+  bridgeCreatedTabs.add(tab.id);
+  try {
+    await groupAgentTab(tab);
+  } catch (error) {
+    // Grouping is cosmetic: pinned tabs, popup windows and incognito reject it.
+    recordLog("tabgroup.error", {
+      tabId: tab.id,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function createAgentTab(createProperties = {}) {
+  // Agent tabs open in the background so they never steal the active tab,
+  // raise the window, or flash the taskbar. Callers can still opt in.
+  const tab = await chrome.tabs.create({ active: false, ...createProperties });
+  await trackAgentTab(tab);
+  return tab;
+}
+
 const rpcMethods = new Map([
   ["chrome.debugger.attach", attachDebuggee],
   ["chrome.debugger.detach", detachDebuggee],
   ["chrome.debugger.sendCommand", (...args) => chrome.debugger.sendCommand(...args)],
   ["chrome.debugger.getTargets", (...args) => chrome.debugger.getTargets(...args)],
   ["chrome.tabs.query", (...args) => chrome.tabs.query(...args)],
-  ["chrome.tabs.create", (...args) => chrome.tabs.create(...args)],
+  ["chrome.tabs.create", createAgentTab],
   ["chrome.tabs.remove", (...args) => chrome.tabs.remove(...args)],
   ["chrome.tabs.update", (...args) => chrome.tabs.update(...args)],
-  ["chrome.windows.update", (...args) => chrome.windows.update(...args)],
 ]);
 
 async function handleRpc(message) {
@@ -143,7 +261,7 @@ async function handleRpc(message) {
   }
   try {
     const result = await handler(...(Array.isArray(message.params) ? message.params : []));
-    return { result: result ?? null };
+    return { result: sanitizeRpcResult(message.method, result) ?? null };
   } catch (error) {
     const messageText = error instanceof Error ? error.message : String(error);
     recordLog("rpc.error", { method: message.method, message: messageText });
@@ -157,8 +275,8 @@ async function announceReady() {
     chrome.debugger.getTargets(),
   ]);
   emit("bridge.ready", [{
-    tabs,
-    targets,
+    tabs: tabs.map(sanitizeTab).filter(Boolean),
+    targets: targets.map(sanitizeTarget).filter(Boolean),
     browser: { userAgent: navigator.userAgent },
   }]);
   recordLog("bridge.ready", { tabs: tabs.length, targets: targets.length });
@@ -265,15 +383,26 @@ chrome.debugger.onDetach.addListener((source, reason) => {
 });
 
 chrome.tabs.onCreated.addListener((tab) => {
-  emit("chrome.tabs.onCreated", [tab]);
+  const sanitized = sanitizeTab(tab);
+  if (sanitized) emit("chrome.tabs.onCreated", [sanitized]);
+  // Pages the agent drives can open their own tabs; keep those in the group too.
+  if (bridgeCreatedTabs.has(tab?.openerTabId)) void trackAgentTab(tab);
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  emit("chrome.tabs.onUpdated", [tabId, changeInfo, tab]);
+  const sanitized = sanitizeTab(tab);
+  if (sanitized) emit("chrome.tabs.onUpdated", [tabId, {}, sanitized]);
 });
 
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+  bridgeCreatedTabs.delete(tabId);
   emit("chrome.tabs.onRemoved", [tabId, removeInfo]);
+});
+
+chrome.tabGroups.onRemoved.addListener((group) => {
+  if (agentGroupByWindow.get(group.windowId) === group.id) {
+    agentGroupByWindow.delete(group.windowId);
+  }
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {

@@ -19,6 +19,7 @@ HOST = "127.0.0.1"
 PORT = 9222
 PROTOCOL_VERSION = "1.3"
 RPC_TIMEOUT = 120.0
+EXTENSION_MAX_MESSAGE_SIZE = 16 * 1024 * 1024
 LOGGER = logging.getLogger("webbridge")
 
 
@@ -608,13 +609,11 @@ class BridgeState:
         tab_id = self.target_to_tab.get(target_id)
         if tab_id is None:
             return False
-        tab = await self.require_extension().call(
+        # Select the tab inside its own window, but never raise the window:
+        # focusing it would pull the desktop away from whatever the user is doing.
+        await self.require_extension().call(
             "chrome.tabs.update", [tab_id, {"active": True}]
         )
-        if isinstance(tab, dict) and isinstance(tab.get("windowId"), int):
-            await self.require_extension().call(
-                "chrome.windows.update", [tab["windowId"], {"focused": True}]
-            )
         return True
 
     async def handle_cdp_command(
@@ -786,7 +785,10 @@ async def json_close(request: web.Request) -> web.Response:
 
 async def extension_socket(request: web.Request) -> web.WebSocketResponse:
     state: BridgeState = request.app[STATE_KEY]
-    socket = web.WebSocketResponse(heartbeat=30)
+    socket = web.WebSocketResponse(
+        heartbeat=30,
+        max_msg_size=EXTENSION_MAX_MESSAGE_SIZE,
+    )
     await socket.prepare(request)
     connection = ExtensionConnection(socket)
     await state.install_extension(connection)
