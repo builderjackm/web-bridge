@@ -35,20 +35,23 @@ class LifecycleCliTests(unittest.TestCase):
         self.assertIn("Extension: connected", lines)
         self.assertIn("Page targets: 2", lines)
 
-    @patch.object(cli, "_write_pid")
+    @patch.object(cli, "_write_pids")
+    @patch.object(cli, "_read_pids", return_value=[24, 42])
     @patch.object(
         cli,
         "_status_payload",
         return_value={"name": "webbridge", "pid": 42},
     )
     @patch("builtins.print")
-    def test_start_is_idempotent(self, output: Mock, _: Mock, write_pid: Mock) -> None:
+    def test_start_is_idempotent(
+        self, output: Mock, _: Mock, __: Mock, write_pids: Mock
+    ) -> None:
         self.assertEqual(cli.run(["start"]), 0)
-        write_pid.assert_called_once_with(42)
+        write_pids.assert_called_once_with([24, 42])
         output.assert_called_once_with("WebBridge daemon is already running (pid 42).")
 
     @patch.object(cli.time, "sleep")
-    @patch.object(cli, "_write_pid")
+    @patch.object(cli, "_write_pids")
     @patch.object(cli, "_spawn_daemon")
     @patch.object(
         cli,
@@ -64,7 +67,7 @@ class LifecycleCliTests(unittest.TestCase):
         output: Mock,
         _: Mock,
         spawn: Mock,
-        write_pid: Mock,
+        write_pids: Mock,
         __: Mock,
     ) -> None:
         spawn.return_value.pid = 24
@@ -72,11 +75,13 @@ class LifecycleCliTests(unittest.TestCase):
 
         self.assertEqual(cli.run(["start"]), 0)
 
-        self.assertEqual([call.args[0] for call in write_pid.call_args_list], [24, 42])
+        self.assertEqual(
+            [call.args[0] for call in write_pids.call_args_list], [[24], [24, 42]]
+        )
         self.assertIn("WebBridge daemon started (pid 42).", output.call_args_list[0].args)
 
     @patch.object(cli, "_remove_pid")
-    @patch.object(cli, "_read_pid", return_value=None)
+    @patch.object(cli, "_read_pids", return_value=[])
     @patch.object(cli, "_status_payload", return_value=None)
     @patch("builtins.print")
     def test_stop_is_idempotent(
@@ -85,6 +90,89 @@ class LifecycleCliTests(unittest.TestCase):
         self.assertEqual(cli.run(["stop"]), 0)
         remove_pid.assert_called_once_with()
         output.assert_called_once_with("WebBridge daemon is not running.")
+
+    @patch.object(cli, "_remove_pid")
+    @patch.object(cli, "_stop_process", return_value=True)
+    @patch.object(cli, "_pid_alive", return_value=True)
+    @patch.object(cli, "_is_daemon_process", return_value=True)
+    @patch.object(cli, "_read_pids", return_value=[24, 42])
+    @patch.object(
+        cli, "_status_payload", return_value={"name": "webbridge", "pid": 42}
+    )
+    @patch("builtins.print")
+    def test_stop_also_kills_the_launcher_process(
+        self,
+        output: Mock,
+        _: Mock,
+        __: Mock,
+        ___: Mock,
+        ____: Mock,
+        stop_process: Mock,
+        remove_pid: Mock,
+    ) -> None:
+        self.assertEqual(cli.run(["stop"]), 0)
+        self.assertEqual(
+            [call.args[0] for call in stop_process.call_args_list], [42, 24]
+        )
+        remove_pid.assert_called_once_with()
+        output.assert_called_once_with("WebBridge daemon stopped.")
+
+    @patch.object(cli, "_remove_pid")
+    @patch.object(cli, "_stop_process", return_value=True)
+    @patch.object(cli, "_pid_alive", return_value=True)
+    @patch.object(cli, "_is_daemon_process", return_value=True)
+    @patch.object(cli, "_read_pids", return_value=[77])
+    @patch.object(cli, "_status_payload", return_value=None)
+    @patch("builtins.print")
+    def test_stop_kills_a_daemon_that_stopped_answering(
+        self,
+        output: Mock,
+        _: Mock,
+        __: Mock,
+        ___: Mock,
+        ____: Mock,
+        stop_process: Mock,
+        remove_pid: Mock,
+    ) -> None:
+        self.assertEqual(cli.run(["stop"]), 0)
+        stop_process.assert_called_once_with(77)
+        remove_pid.assert_called_once_with()
+        output.assert_called_once_with("WebBridge daemon stopped.")
+
+    @patch.object(cli, "_pid_alive", return_value=True)
+    @patch.object(cli, "_is_daemon_process", return_value=False)
+    @patch.object(cli, "_read_pids", return_value=[77])
+    @patch.object(cli, "_status_payload", return_value=None)
+    @patch("builtins.print")
+    def test_stop_leaves_a_recycled_pid_alone(
+        self, output: Mock, _: Mock, __: Mock, ___: Mock, ____: Mock
+    ) -> None:
+        self.assertEqual(cli.run(["stop"]), 1)
+        self.assertIn("refusing to stop an unverified PID", output.call_args.args[0])
+
+    def test_signalling_a_dead_pid_never_raises(self) -> None:
+        process = subprocess.Popen([sys.executable, "-c", "pass"])
+        process.wait(timeout=10)
+        self.assertFalse(cli._signal_process(process.pid, cli.signal.SIGTERM))
+        self.assertTrue(cli._stop_process(process.pid))
+
+    def test_a_daemon_process_is_told_apart_from_a_recycled_pid(self) -> None:
+        self.assertTrue(cli._is_daemon_process(os.getpid()))
+        with patch.object(cli, "_daemon_interpreters", return_value={"/nowhere/python"}):
+            self.assertFalse(cli._is_daemon_process(os.getpid()))
+
+    def test_pid_file_round_trips_every_process_of_a_daemon(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_dir = Path(directory)
+            with (
+                patch.object(cli, "STATE_DIR", state_dir),
+                patch.object(cli, "PID_FILE", state_dir / "daemon.pid"),
+            ):
+                cli._write_pids([24, 42, 24, 0])
+                self.assertEqual(cli._read_pids(), [24, 42])
+                # A single-line file written by an older release still loads.
+                (state_dir / "daemon.pid").write_text("42\n", encoding="utf-8")
+                self.assertEqual(cli._read_pids(), [42])
 
     @patch.object(cli, "start", return_value=0)
     @patch.object(cli, "stop", return_value=0)
